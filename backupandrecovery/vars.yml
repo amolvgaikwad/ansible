@@ -3,4 +3,4 @@ user_app: amolg
 app_name: postgresql
 db_name: postgres
 db_password: postgres@222
-host_url: 33.222.111.111
+host_url: your_server_ip_address
