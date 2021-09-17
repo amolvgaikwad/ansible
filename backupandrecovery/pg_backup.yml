@@ -1,0 +1,65 @@
+--- 
+- name: playbook to backup postgres 
+  become: true
+  hosts: "{{ hosts_inventory }}"
+  gather_facts: no
+  vars_files: 
+    - vars.yml
+    
+  tasks: 
+    - name: Set timestamp of the backup
+      set_fact: 
+        now: "{{ lookup('pipe', 'date +%F-%T') }}"
+    
+    - name: Create a backup directory
+      file: 
+        mode: 0777
+        owner: "{{ user_app }}"
+        path: "/var/lib/{{ app_name }}/backups/{{ now }}/"
+        state: directory
+
+      
+    - name: Back up the database
+      become: true
+      become_user: postgres
+      postgresql_db: 
+        name: "{{ db_name }}"
+        state: dump
+        target: "/var/lib/{{ app_name }}/backups/{{ now }}/{{ db_name }}.dump.gz"
+
+        
+    - name: Fetch backup from the server
+      fetch: 
+        dest: "backups/{{ now }}/{{ db_name }}.dump.gz"
+        flat: true
+        src: "/var/lib/{{ app_name }}/backups/{{ now }}/{{ db_name }}.dump.gz"
+        
+    - name: "Restore the database"
+      postgresql_db:
+        state: restore
+        name: "{{db_name}}"
+        target: "/var/lib/{{ app_name }}/backups/{{ now }}/{{ db_name }}.dump.gz"
+      become: yes
+      become_user: postgres
+ 
+    - name: Upload some content
+      gc_storage:
+        bucket: ansible-agora-backup
+        object: "backups/{{ now }}/{{ db_name }}.dump.gz"
+        src: "/var/lib/{{ app_name }}/backups/{{ now }}/{{ db_name }}.dump.gz"
+        mode: create
+        gs_access_key: get_access_key_from_google_cloud_portal
+        gs_secret_key: get_secret_key_from_google_cloud_portal
+
+   # - name: Upload Latest Backup(s) to GCS Bucket
+    #  gcp_storage_object:
+    #    action: upload
+    #   overwrite: yes
+    #    bucket: agora-backup
+    #    src: "/var/lib/{{ app_name }}/backups/{{ now }}/{{ db_name }}.dump.gz"
+    #    dest: "~/{{ db_name }}.dump.gz"
+    #    project: agora-apps-dev
+    #    auth_kind: serviceaccount
+    #    service_account_file: "./temp/auth.json"
+    #    state: present  
+      
